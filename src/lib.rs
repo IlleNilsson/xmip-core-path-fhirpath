@@ -267,10 +267,7 @@ fn json(value: StructuredValue) -> Result<Value, ContractError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn stream(text: &str) -> Stream {
-        Stream::new(StreamId::new(1), text.as_bytes().to_vec(), None)
-    }
+    use path::fixture::stream;
 
     const PATIENT: &str = r#"{"resourceType":"Patient","id":"p1","active":true,
         "name":[{"use":"official","family":"Chalmers","given":["Peter","James"]},

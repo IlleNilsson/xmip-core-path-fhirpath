@@ -5,9 +5,13 @@
 //! A resource type is told from a member by its case — FHIR names every
 //! resource type in upper camel case and every element in lower camel case,
 //! so `Patient.name` is the type and the member, never two members.
+//!
+//! The cursor the parser walks its tokens with is the capability's, shared
+//! with the predicate language (ADR-0044); the grammar below is `FHIRPath`'s.
 
 use crate::lexer::{Token, error, tokenize};
 use contract::ContractError;
+use path::cursor::Cursor;
 
 /// A literal on the right of `=` or `!=`.
 #[derive(Clone, Debug, PartialEq)]
@@ -90,144 +94,119 @@ impl Expression {
     /// with the steps this core supports.
     pub fn parse(text: &str) -> Result<Self, ContractError> {
         let tokens = tokenize(text)?;
-        let mut parser = Parser {
-            tokens: &tokens,
-            at: 0,
-        };
-        let expression = parser.expression()?;
-        match parser.tokens.get(parser.at) {
-            None => Ok(expression),
+        let mut cursor = Cursor::new("FHIRPath", &tokens);
+        let parsed = expression(&mut cursor)?;
+        match cursor.peek() {
+            None => Ok(parsed),
             Some(token) => Err(error(format!("unexpected {token:?} after the expression"))),
         }
     }
 }
 
-struct Parser<'a> {
-    tokens: &'a [Token],
-    at: usize,
+type Tokens<'a> = Cursor<'a, Token>;
+
+fn expression(cursor: &mut Tokens<'_>) -> Result<Expression, ContractError> {
+    let (resource_type, mut steps) = match cursor.take() {
+        Some(Token::Identifier(name)) if name.starts_with(char::is_uppercase) => {
+            (Some(name.clone()), Vec::new())
+        }
+        Some(Token::Identifier(name)) => (None, vec![Step::Member(name.clone())]),
+        other => return Err(error(format!("expected a name to start, found {other:?}"))),
+    };
+    loop {
+        match cursor.peek() {
+            Some(Token::Dot) => {
+                cursor.advance(1);
+                steps.push(step(cursor)?);
+            }
+            Some(Token::OpenBracket) => {
+                cursor.advance(1);
+                steps.push(Step::Index(index(cursor)?));
+            }
+            _ => break,
+        }
+    }
+    let comparison = match cursor.peek() {
+        Some(Token::Equal) => Some(Comparison::Equal),
+        Some(Token::NotEqual) => Some(Comparison::NotEqual),
+        _ => None,
+    }
+    .map(|comparison| {
+        cursor.advance(1);
+        literal(cursor).map(|literal| (comparison, literal))
+    })
+    .transpose()?;
+    Ok(Expression {
+        resource_type,
+        steps,
+        comparison,
+    })
 }
 
-impl Parser<'_> {
-    fn expression(&mut self) -> Result<Expression, ContractError> {
-        let (resource_type, mut steps) = match self.next() {
-            Some(Token::Identifier(name)) if name.starts_with(char::is_uppercase) => {
-                (Some(name.clone()), Vec::new())
-            }
-            Some(Token::Identifier(name)) => (None, vec![Step::Member(name.clone())]),
-            other => return Err(error(format!("expected a name to start, found {other:?}"))),
-        };
-        loop {
-            match self.peek() {
-                Some(Token::Dot) => {
-                    self.at += 1;
-                    steps.push(self.step()?);
-                }
-                Some(Token::OpenBracket) => {
-                    self.at += 1;
-                    steps.push(Step::Index(self.index()?));
-                }
-                _ => break,
-            }
+fn step(cursor: &mut Tokens<'_>) -> Result<Step, ContractError> {
+    let name = match cursor.take() {
+        Some(Token::Identifier(name)) => name.clone(),
+        other => return Err(error(format!("expected a step after '.', found {other:?}"))),
+    };
+    if cursor.peek() != Some(&Token::OpenParen) {
+        return Ok(Step::Member(name));
+    }
+    cursor.advance(1);
+    let step = match name.as_str() {
+        "first" => Step::First,
+        "last" => Step::Last,
+        "count" => Step::Count,
+        "exists" => Step::Exists,
+        "empty" => Step::Empty,
+        "where" => criterion(cursor)?,
+        "select" => Step::Select(member(cursor)?),
+        other => return Err(error(format!("{other}() is not a function this core has"))),
+    };
+    cursor.expect(&Token::CloseParen)?;
+    Ok(step)
+}
+
+fn criterion(cursor: &mut Tokens<'_>) -> Result<Step, ContractError> {
+    let member = member(cursor)?;
+    let comparison = match cursor.take() {
+        Some(Token::Equal) => Comparison::Equal,
+        Some(Token::NotEqual) => Comparison::NotEqual,
+        other => return Err(error(format!("where() needs = or !=, found {other:?}"))),
+    };
+    let literal = literal(cursor)?;
+    Ok(Step::Where {
+        member,
+        comparison,
+        literal,
+    })
+}
+
+fn member(cursor: &mut Tokens<'_>) -> Result<String, ContractError> {
+    match cursor.take() {
+        Some(Token::Identifier(name)) => Ok(name.clone()),
+        other => Err(error(format!("expected a member name, found {other:?}"))),
+    }
+}
+
+fn index(cursor: &mut Tokens<'_>) -> Result<usize, ContractError> {
+    let index = match cursor.take() {
+        Some(Token::Integer(index)) => {
+            usize::try_from(*index).map_err(|_| error(format!("[{index}] is not an index")))?
         }
-        let comparison = match self.peek() {
-            Some(Token::Equal) => Some(Comparison::Equal),
-            Some(Token::NotEqual) => Some(Comparison::NotEqual),
-            _ => None,
-        }
-        .map(|comparison| {
-            self.at += 1;
-            self.literal().map(|literal| (comparison, literal))
-        })
-        .transpose()?;
-        Ok(Expression {
-            resource_type,
-            steps,
-            comparison,
-        })
-    }
+        other => return Err(error(format!("expected an index in [], found {other:?}"))),
+    };
+    cursor.expect(&Token::CloseBracket)?;
+    Ok(index)
+}
 
-    fn step(&mut self) -> Result<Step, ContractError> {
-        let name = match self.next() {
-            Some(Token::Identifier(name)) => name.clone(),
-            other => return Err(error(format!("expected a step after '.', found {other:?}"))),
-        };
-        if self.peek() != Some(&Token::OpenParen) {
-            return Ok(Step::Member(name));
-        }
-        self.at += 1;
-        let step = match name.as_str() {
-            "first" => Step::First,
-            "last" => Step::Last,
-            "count" => Step::Count,
-            "exists" => Step::Exists,
-            "empty" => Step::Empty,
-            "where" => self.criterion()?,
-            "select" => Step::Select(self.member()?),
-            other => return Err(error(format!("{other}() is not a function this core has"))),
-        };
-        self.expect(&Token::CloseParen)?;
-        Ok(step)
-    }
-
-    fn criterion(&mut self) -> Result<Step, ContractError> {
-        let member = self.member()?;
-        let comparison = match self.next() {
-            Some(Token::Equal) => Comparison::Equal,
-            Some(Token::NotEqual) => Comparison::NotEqual,
-            other => return Err(error(format!("where() needs = or !=, found {other:?}"))),
-        };
-        let literal = self.literal()?;
-        Ok(Step::Where {
-            member,
-            comparison,
-            literal,
-        })
-    }
-
-    fn member(&mut self) -> Result<String, ContractError> {
-        match self.next() {
-            Some(Token::Identifier(name)) => Ok(name.clone()),
-            other => Err(error(format!("expected a member name, found {other:?}"))),
-        }
-    }
-
-    fn index(&mut self) -> Result<usize, ContractError> {
-        let index = match self.next() {
-            Some(Token::Integer(index)) => {
-                usize::try_from(*index).map_err(|_| error(format!("[{index}] is not an index")))?
-            }
-            other => return Err(error(format!("expected an index in [], found {other:?}"))),
-        };
-        self.expect(&Token::CloseBracket)?;
-        Ok(index)
-    }
-
-    fn literal(&mut self) -> Result<Literal, ContractError> {
-        match self.next() {
-            Some(Token::Text(text)) => Ok(Literal::Text(text.clone())),
-            Some(Token::Integer(integer)) => Ok(Literal::Integer(*integer)),
-            Some(Token::Decimal(decimal)) => Ok(Literal::Decimal(*decimal)),
-            Some(Token::Identifier(word)) if word == "true" => Ok(Literal::Bool(true)),
-            Some(Token::Identifier(word)) if word == "false" => Ok(Literal::Bool(false)),
-            other => Err(error(format!("expected a literal, found {other:?}"))),
-        }
-    }
-
-    fn expect(&mut self, token: &Token) -> Result<(), ContractError> {
-        match self.next() {
-            Some(found) if found == token => Ok(()),
-            other => Err(error(format!("expected {token:?}, found {other:?}"))),
-        }
-    }
-
-    fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.at)
-    }
-
-    fn next(&mut self) -> Option<&Token> {
-        let token = self.tokens.get(self.at);
-        self.at += 1;
-        token
+fn literal(cursor: &mut Tokens<'_>) -> Result<Literal, ContractError> {
+    match cursor.take() {
+        Some(Token::Text(text)) => Ok(Literal::Text(text.clone())),
+        Some(Token::Integer(integer)) => Ok(Literal::Integer(*integer)),
+        Some(Token::Decimal(decimal)) => Ok(Literal::Decimal(*decimal)),
+        Some(Token::Identifier(word)) if word == "true" => Ok(Literal::Bool(true)),
+        Some(Token::Identifier(word)) if word == "false" => Ok(Literal::Bool(false)),
+        other => Err(error(format!("expected a literal, found {other:?}"))),
     }
 }
 
@@ -288,6 +267,11 @@ mod tests {
         assert!(Expression::parse("Patient.name 'x'").is_err());
         assert!(Expression::parse("").is_err());
         assert!(Expression::parse("Patient.where(a < 1)").is_err());
+        let unclosed = Expression::parse("Patient.name[0").expect_err("refused");
+        assert_eq!(
+            unclosed.message,
+            "FHIRPath: expected CloseBracket, found None"
+        );
     }
 
     #[test]
