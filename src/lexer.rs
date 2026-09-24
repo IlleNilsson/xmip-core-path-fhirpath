@@ -5,6 +5,7 @@
 //! and function names; the parser tells them apart by the parenthesis that
 //! follows a function.
 
+use codec::char_reader::CharReader;
 use contract::ContractError;
 
 /// One token of an expression.
@@ -34,83 +35,75 @@ pub enum Token {
     NotEqual,
 }
 
-/// Split `expression` into tokens.
+/// Split `expression` into tokens. Whitespace is any Unicode whitespace, and
+/// an identifier may hold any letter.
 ///
 /// # Errors
 /// A character that begins no token, an unterminated string, or a number that
 /// does not parse.
 pub fn tokenize(expression: &str) -> Result<Vec<Token>, ContractError> {
+    let mut reader = CharReader::new(expression);
     let mut tokens = Vec::new();
-    let mut rest = expression;
-    while let Some(first) = rest.chars().next() {
-        let consumed = match first {
-            character if character.is_whitespace() => 1,
-            '.' => push(&mut tokens, Token::Dot),
-            '[' => push(&mut tokens, Token::OpenBracket),
-            ']' => push(&mut tokens, Token::CloseBracket),
-            '(' => push(&mut tokens, Token::OpenParen),
-            ')' => push(&mut tokens, Token::CloseParen),
-            '=' => push(&mut tokens, Token::Equal),
-            '!' if rest.starts_with("!=") => 1 + push(&mut tokens, Token::NotEqual),
-            '\'' => text(rest, &mut tokens)?,
-            character if character.is_ascii_digit() => number(rest, &mut tokens)?,
+    while let Some(first) = reader.peek() {
+        if reader.skip_whitespace() {
+            continue;
+        }
+        let token = match first {
+            '.' => single(&mut reader, Token::Dot),
+            '[' => single(&mut reader, Token::OpenBracket),
+            ']' => single(&mut reader, Token::CloseBracket),
+            '(' => single(&mut reader, Token::OpenParen),
+            ')' => single(&mut reader, Token::CloseParen),
+            '=' => single(&mut reader, Token::Equal),
+            '!' if reader.eat_str("!=") => Token::NotEqual,
+            '\'' => text(&mut reader)?,
+            character if character.is_ascii_digit() => number(&mut reader)?,
             character if character.is_alphabetic() || character == '_' => {
-                identifier(rest, &mut tokens)
+                let name = reader.take_while(|next| next.is_alphanumeric() || next == '_');
+                Token::Identifier(name.to_string())
             }
             other => {
                 return Err(error(format!(
                     "unexpected {other:?} at {} in {expression:?}",
-                    expression.len() - rest.len()
+                    reader.offset()
                 )));
             }
         };
-        rest = &rest[consumed..];
+        tokens.push(token);
     }
     Ok(tokens)
 }
 
-fn push(tokens: &mut Vec<Token>, token: Token) -> usize {
-    tokens.push(token);
-    1
+fn single(reader: &mut CharReader<'_>, token: Token) -> Token {
+    reader.bump();
+    token
 }
 
-fn text(rest: &str, tokens: &mut Vec<Token>) -> Result<usize, ContractError> {
-    let body = &rest[1..];
-    let end = body
-        .find('\'')
-        .ok_or_else(|| error(format!("unterminated string in {rest:?}")))?;
-    tokens.push(Token::Text(body[..end].to_string()));
-    Ok(end + 2)
+fn text(reader: &mut CharReader<'_>) -> Result<Token, ContractError> {
+    let start = reader.offset();
+    reader.bump();
+    let body = reader.take_while(|character| character != '\'');
+    if !reader.eat('\'') {
+        return Err(error(format!(
+            "unterminated string in {:?}",
+            reader.since(start)
+        )));
+    }
+    Ok(Token::Text(body.to_string()))
 }
 
-fn number(rest: &str, tokens: &mut Vec<Token>) -> Result<usize, ContractError> {
-    let end = rest
-        .find(|character: char| !character.is_ascii_digit() && character != '.')
-        .unwrap_or(rest.len());
-    let digits = rest[..end].trim_end_matches('.');
-    let token = if digits.contains('.') {
-        Token::Decimal(
-            digits
-                .parse()
-                .map_err(|_| error(format!("{digits:?} is not a number")))?,
-        )
+/// Digits and points; a trailing point belongs to the next step.
+fn number(reader: &mut CharReader<'_>) -> Result<Token, ContractError> {
+    let digits = reader
+        .peek_while(|character| character.is_ascii_digit() || character == '.')
+        .trim_end_matches('.');
+    reader.eat_str(digits);
+    let not_a_number = || error(format!("{digits:?} is not a number"));
+    Ok(if digits.contains('.') {
+        Token::Decimal(digits.parse().map_err(|_| not_a_number())?)
     } else {
-        Token::Integer(
-            digits
-                .parse()
-                .map_err(|_| error(format!("{digits:?} is not a number")))?,
-        )
-    };
-    tokens.push(token);
-    Ok(digits.len())
-}
-
-fn identifier(rest: &str, tokens: &mut Vec<Token>) -> usize {
-    let end = rest
-        .find(|character: char| !character.is_alphanumeric() && character != '_')
-        .unwrap_or(rest.len());
-    tokens.push(Token::Identifier(rest[..end].to_string()));
-    end
+        Token::Integer(digits.parse().map_err(|_| not_a_number())?)
+    })
 }
 
 pub(crate) fn error(message: impl std::fmt::Display) -> ContractError {
@@ -161,5 +154,32 @@ mod tests {
         assert!(stray.message.contains("'#'"), "{}", stray.message);
         assert!(tokenize("a = 'open").is_err());
         assert!(tokenize("a ! b").is_err());
+    }
+
+    #[test]
+    fn multibyte_whitespace_and_letters_lex_without_panic() {
+        let tokens =
+            tokenize("Patient\u{a0}.\u{3000}naam\u{2003}=\u{a0}'Zoë 名前'").expect("lexes");
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Identifier("Patient".into()),
+                Token::Dot,
+                Token::Identifier("naam".into()),
+                Token::Equal,
+                Token::Text("Zoë 名前".into()),
+            ]
+        );
+        assert_eq!(
+            tokenize("Straße.名前").expect("lexes"),
+            vec![
+                Token::Identifier("Straße".into()),
+                Token::Dot,
+                Token::Identifier("名前".into()),
+            ]
+        );
+        let stray = tokenize("a\u{a0}€").expect_err("refused");
+        assert!(stray.message.contains("'€' at 3"), "{}", stray.message);
+        assert!(tokenize("a = 'öpen\u{a0}").is_err());
     }
 }
