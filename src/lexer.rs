@@ -5,7 +5,7 @@
 //! and function names; the parser tells them apart by the parenthesis that
 //! follows a function.
 
-use contract::ContractError;
+use sdk::contract::ContractError;
 
 /// One token of an expression.
 #[derive(Clone, Debug, PartialEq)]
