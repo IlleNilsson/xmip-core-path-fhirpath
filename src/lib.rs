@@ -30,13 +30,13 @@ mod lexer;
 
 pub use expression::{Comparison, Expression, Literal, Step};
 
-use eval::{evaluate, member_pointer};
-use lexer::error;
-use path::{Path, PathCost, PathEngine};
-use sdk::contract::{
+use contract::{
     ContractDescriptor, ContractError, ContractId, StructureReader, StructureWriter,
     StructuredValue,
 };
+use eval::{evaluate, member_pointer};
+use lexer::error;
+use path::{Path, PathCost, PathEngine};
 use serde_json::Value;
 use stream::Stream;
 use xcore::StreamId;

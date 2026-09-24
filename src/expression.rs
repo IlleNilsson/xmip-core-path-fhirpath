@@ -10,8 +10,8 @@
 //! with the predicate language (ADR-0044); the grammar below is `FHIRPath`'s.
 
 use crate::lexer::{Token, error, tokenize};
+use contract::ContractError;
 use path::cursor::Cursor;
-use sdk::contract::ContractError;
 
 /// A literal on the right of `=` or `!=`.
 #[derive(Clone, Debug, PartialEq)]

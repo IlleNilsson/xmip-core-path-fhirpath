@@ -10,7 +10,7 @@
 
 use crate::expression::{Comparison, Expression, Literal, Step};
 use crate::lexer::error;
-use sdk::contract::ContractError;
+use contract::ContractError;
 use serde_json::Value;
 use std::borrow::Cow;
 
