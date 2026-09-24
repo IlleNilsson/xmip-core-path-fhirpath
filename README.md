@@ -5,6 +5,11 @@ count and exists over a FHIR JSON resource, the first item read and written,
 for promote, demote, route and process. A technology of
 [xmip-core-path](https://github.com/IlleNilsson/xmip-core-path).
 
+An expression is read through `xmip-core-library-codec`'s character reader:
+any Unicode whitespace separates tokens, an identifier may hold any letter,
+and a character that begins no token is refused by its offset, never a
+panic.
+
 ## Toolchain
 
 `rust-toolchain.toml` pins the toolchain for the whole estate. Do not change it

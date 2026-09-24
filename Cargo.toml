@@ -19,6 +19,8 @@ path = "src/lib.rs"
 # reader and writer traits it drives live in contract.
 path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
 contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main" }
+# The character reader every lexer walks its text with.
+codec = { package = "xmip-core-library-codec", git = "https://github.com/IlleNilsson/xmip-core-library-codec", branch = "main" }
 stream = { package = "xmip-core-stream", git = "https://github.com/IlleNilsson/xmip-core-stream", branch = "main" }
 xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
 
