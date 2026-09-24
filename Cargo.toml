@@ -14,7 +14,6 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-sdk = { package = "xmip-core-sdk", git = "https://github.com/IlleNilsson/xmip-core-sdk", branch = "main" }
 # A Technology depends on its parent Capability, never the reverse
 # (repository-model.md). The PathEngine trait lives in path; the structure
 # reader and writer traits it drives live in contract.
