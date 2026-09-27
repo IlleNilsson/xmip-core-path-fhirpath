@@ -15,21 +15,20 @@ path = "src/lib.rs"
 
 [dependencies]
 # A Technology depends on its parent Capability, never the reverse
-# (repository-model.md). The PathEngine trait lives in path; the structure
-# reader and writer traits it drives live in contract.
+# (repository-model.md). The PathLanguage trait, the content a compiled path
+# reads and the rewriting it writes live in path; the error in contract.
 path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
 contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main" }
 # The character reader every lexer walks its text with.
 codec = { package = "xmip-core-library-codec", git = "https://github.com/IlleNilsson/xmip-core-library-codec", branch = "main" }
-stream = { package = "xmip-core-stream", git = "https://github.com/IlleNilsson/xmip-core-stream", branch = "main" }
 xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
 
 # The one real parser, the same one the fhir contract reads with.
 serde_json = "1"
 
 [dev-dependencies]
-# The parent's Stream fixture, for the tests only (ADR-0044).
-path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main", features = ["test-support"] }
+# The Stream fixture, for the tests only (ADR-0044).
+contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main", features = ["test-support"] }
 
 [lints.rust]
 unsafe_code = "forbid"
