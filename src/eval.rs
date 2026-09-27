@@ -115,7 +115,7 @@ fn member<'a>(item: &Item<'a>, name: &str) -> Vec<Item<'a>> {
 /// The JSON pointer of member `name` under `parent`, RFC 6901 escaping applied.
 #[must_use]
 pub fn member_pointer(parent: &str, name: &str) -> String {
-    format!("{parent}/{}", name.replace('~', "~0").replace('/', "~1"))
+    format!("{parent}/{}", contract::place::escape(name))
 }
 
 /// `FHIRPath` equality between a collection and one literal: empty says nothing,
