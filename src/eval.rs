@@ -190,7 +190,10 @@ mod tests {
             values("Patient.name.family", &resource),
             vec![json!("Chalmers")]
         );
-        assert!(values("Patient.nowhere.deeper", &resource).is_empty());
+        assert_eq!(
+            values("Patient.nowhere.deeper", &resource),
+            [] as [serde_json::Value; 0]
+        );
     }
 
     #[test]
@@ -210,8 +213,11 @@ mod tests {
             values("name.where(use != 'usual').select(family)", &resource),
             vec![json!("Chalmers")]
         );
-        assert!(values("name.where(family = 'Nobody')", &resource).is_empty());
-        assert!(values("name[7]", &resource).is_empty());
+        assert_eq!(
+            values("name.where(family = 'Nobody')", &resource),
+            [] as [serde_json::Value; 0]
+        );
+        assert_eq!(values("name[7]", &resource), [] as [serde_json::Value; 0]);
     }
 
     #[test]
@@ -233,7 +239,10 @@ mod tests {
             values("name.given = 'Peter'", &resource),
             vec![json!(false)]
         );
-        assert!(values("nowhere = 'x'", &resource).is_empty());
+        assert_eq!(
+            values("nowhere = 'x'", &resource),
+            [] as [serde_json::Value; 0]
+        );
         let parsed = Expression::parse("name.count()").expect("parses");
         let items = evaluate(&parsed, &resource).expect("evaluates");
         assert_eq!(items[0].pointer, None);
