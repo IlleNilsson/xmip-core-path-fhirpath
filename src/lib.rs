@@ -33,7 +33,7 @@ pub use expression::{Comparison, Expression, Literal, Step};
 use contract::ContractError;
 use eval::{evaluate, member_pointer};
 use lexer::error;
-use path::{CompiledExpression, Content, PathLanguage, Rewriting, json};
+use path::{CompiledExpression, Content, Namespaces, PathLanguage, Rewriting, json};
 use serde_json::Value;
 use xcore::ScalarValue;
 
@@ -45,7 +45,12 @@ impl PathLanguage for FhirPathLanguage {
         "fhirpath"
     }
 
-    fn compile(&self, expression: &str) -> Result<Box<dyn CompiledExpression>, ContractError> {
+    fn compile(
+        &self,
+        expression: &str,
+        namespaces: &Namespaces,
+    ) -> Result<Box<dyn CompiledExpression>, ContractError> {
+        namespaces.unused_by(self.language())?;
         Ok(Box::new(Compiled {
             parsed: Expression::parse(expression)?,
             expression: expression.to_string(),
@@ -149,7 +154,7 @@ mod tests {
         "deceasedBoolean":false,"multipleBirthInteger":2,"weight":72.5}"#;
 
     fn compiled(path: &str) -> Result<Box<dyn CompiledExpression>, ContractError> {
-        FhirPathLanguage.compile(path)
+        FhirPathLanguage.compile(path, &Namespaces::new())
     }
 
     fn read(content: &Content<'_>, path: &str) -> Result<Option<ScalarValue>, ContractError> {
