@@ -1,11 +1,11 @@
 [package]
 name = "xmip-core-path-fhirpath"
-version = "0.1.0"
-edition = "2024"
-license = "AGPL-3.0-or-later"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 repository = "https://github.com/IlleNilsson/xmip-core-path-fhirpath"
 description = "FHIRPath path technology: navigation, indexing, where, select, first, last, count and exists over a FHIR JSON resource, the first item read and written, for promote, demote, route and process. A xmip-core-path technology."
-publish = false
+publish.workspace = true
 
 [lib]
 path = "src/lib.rs"
@@ -27,13 +27,5 @@ serde_json = "1"
 # The Stream fixture, for the tests only (ADR-0044).
 contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main", features = ["test-support"] }
 
-[lints.rust]
-unsafe_code = "forbid"
-
-[lints.clippy]
-too_many_lines = "warn"
-pedantic = { level = "warn", priority = -1 }
-missing_errors_doc = "warn"
-missing_panics_doc = "warn"
-unwrap_used = "warn"
-expect_used = "allow"
+[lints]
+workspace = true
