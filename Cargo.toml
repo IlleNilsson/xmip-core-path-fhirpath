@@ -14,18 +14,18 @@ path = "src/lib.rs"
 # A Technology depends on its parent Capability, never the reverse
 # (repository-model.md). The PathLanguage trait, the content a compiled path
 # reads and the rewriting it writes live in path; the error in contract.
-path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
-contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main" }
+path = { workspace = true }
+contract = { workspace = true }
 # The character reader every lexer walks its text with.
-codec = { package = "xmip-core-library-codec", git = "https://github.com/IlleNilsson/xmip-core-library-codec", branch = "main" }
-xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
+codec = { workspace = true }
+xcore = { workspace = true }
 
 # The one real parser, the same one the fhir contract reads with.
 serde_json = "1"
 
 [dev-dependencies]
 # The Stream fixture, for the tests only (ADR-0044).
-contract = { package = "xmip-core-contract", git = "https://github.com/IlleNilsson/xmip-core-contract", branch = "main", features = ["test-support"] }
+contract = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true
